@@ -1,0 +1,10 @@
+services:
+  hobbydns:
+    image: ghcr.io/lllincoln/hobbydns:latest
+    container_name: hobbydns
+    restart: unless-stopped
+    ports:
+      - "53:53"
+      - "53:53/udp"
+    volumes:
+      - ./config.json:/data/config.json:ro
