@@ -80,69 +80,6 @@ var state = &EngineState{
 	lookupMap:     make(map[string]map[string][]newdns.Set),
 }
 
-// forwardQuery talks directly to the public web to look up records on behalf of local clients
-func forwardQuery(name string, qType uint16) ([]newdns.Set, error) {
-	c := dns.Client{Timeout: 3 * time.Second}
-	m := dns.Msg{}
-	m.SetQuestion(name, qType)
-	m.RecursionDesired = true
-
-	state.mutex.RLock()
-	upstream := state.upstreamDNS
-	state.mutex.RUnlock()
-
-	r, _, err := c.Exchange(&m, upstream)
-	if err != nil {
-		return nil, err
-	}
-
-	if r.Rcode != dns.RcodeSuccess {
-		return nil, fmt.Errorf("upstream returned rcode: %d", r.Rcode)
-	}
-
-	var resolvedSets []newdns.Set
-
-	// Convert external miekg/dns records back into a format newdns understands
-	for _, ans := range r.Answer {
-		header := ans.Header()
-
-		// Ensure types match what was requested
-		if header.Rrtype != qType {
-			continue
-		}
-
-		var address string
-		var data []string
-
-		switch rr := ans.(type) {
-		case *dns.A:
-			address = rr.A.String()
-		case *dns.AAAA:
-			address = rr.AAAA.String()
-		case *dns.CNAME:
-			address = rr.Target
-		case *dns.TXT:
-			data = rr.Txt
-		case *dns.MX:
-			address = rr.Mx
-		}
-
-		resolvedSets = append(resolvedSets, newdns.Set{
-			Name: header.Name,
-			Type: newdns.Type(header.Rrtype),
-			TTL:  time.Duration(header.Ttl) * time.Second,
-			Records: []newdns.Record{
-				{
-					Address: address,
-					Data:    data,
-				},
-			},
-		})
-	}
-
-	return resolvedSets, nil
-}
-
 func parseConfiguration(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -250,6 +187,47 @@ func parseConfiguration(path string) (string, error) {
 	return host, nil
 }
 
+type proxyRouter struct {
+	authoritative dns.Handler
+	logger        newdns.Logger
+}
+
+func (r proxyRouter) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
+	if len(req.Question) != 1 {
+		r.authoritative.ServeDNS(w, req)
+		return
+	}
+
+	question := req.Question[0]
+	if question.Qclass != dns.ClassINET || question.Qtype == dns.TypeANY {
+		r.authoritative.ServeDNS(w, req)
+		return
+	}
+
+	name := newdns.NormalizeDomain(question.Name, true, false, false)
+
+	state.mutex.RLock()
+	proxyEnabled := state.proxyFallback
+	upstream := state.upstreamDNS
+	zones := state.zoneMap
+
+	isLocal := false
+	for zoneName := range zones {
+		if newdns.InZone(zoneName, name) {
+			isLocal = true
+			break
+		}
+	}
+	state.mutex.RUnlock()
+
+	if isLocal || !proxyEnabled {
+		r.authoritative.ServeDNS(w, req)
+		return
+	}
+
+	newdns.Proxy(upstream, r.logger).ServeDNS(w, req)
+}
+
 func main() {
 	const configFile = "config.json"
 
@@ -259,44 +237,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	logger := func(e newdns.Event, msg *dns.Msg, err error, reason string) {
+		fmt.Printf("[DNS] Event: %s | Error: %v | Reason: %s\n", e, err, reason)
+	}
+
 	server := newdns.NewServer(newdns.Config{
 		Handler: func(name string) (*newdns.Zone, error) {
 			state.mutex.RLock()
-			isProxyEnabled := state.proxyFallback
 			zones := state.zoneMap
 			state.mutex.RUnlock()
 
-			// 1. If it matches a locally configured zone, handle it locally
 			for zoneName, zonePointer := range zones {
 				if newdns.InZone(zoneName, name) {
 					return zonePointer, nil
 				}
 			}
 
-			// 2. If it's a completely foreign domain (e.g., github.com) and proxying is allowed:
-			if isProxyEnabled {
-				return &newdns.Zone{
-					Name:             name,
-					MasterNameServer: "ns1.proxy.",
-					AllNameServers:   []string{"ns1.proxy."},
-					Handler: func(relName string) ([]newdns.Set, error) {
-						// For proxies, query the incoming FQDN name against upstream public systems
-						// We pass the raw type under inspection down the chain
-						return forwardQuery(name, dns.TypeA)
-					},
-				}, nil
-			}
-
 			return nil, nil
 		},
-		Logger: func(e newdns.Event, msg *dns.Msg, err error, reason string) {
-			fmt.Printf("[DNS] Event: %s | Error: %v | Reason: %s\n", e, err, reason)
-		},
+		Logger: logger,
 	})
 
 	go func() {
 		fmt.Printf("Dynamic hybrid private/proxy engine listening on %s...\n", initialHost)
-		if err := server.Run(initialHost); err != nil {
+		handler := proxyRouter{
+			authoritative: server,
+			logger:        logger,
+		}
+		if err := newdns.Run(initialHost, handler, newdns.Accept(logger), nil); err != nil {
 			panic(err)
 		}
 	}()
