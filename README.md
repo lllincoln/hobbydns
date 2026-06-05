@@ -100,7 +100,7 @@ Open a separate terminal shell and execute network diagnostic lookups via `dig` 
 
 ```sh
 # Local internal zone query 🖥️
-dig devbox.internal.lincolnmaxwell.com @127.0.0.1
+dig devbox.internal.example.com @127.0.0.1
 
 # External recursive fallback proxy query 🌍
 dig github.com @127.0.0.1
