@@ -1,9 +1,8 @@
-name: 🚀 Build Binaries on Release
+name: Release
 
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,15 +25,15 @@ jobs:
         goarch: [amd64, arm64]
 
     steps:
-    - name: 📥 Check out repository
+    - name: Check out repository
       uses: actions/checkout@v4
 
-    - name: 🐹 Set up Go environment
+    - name: Set up Go environment
       uses: actions/setup-go@v5
       with:
         go-version: '1.26'
 
-    - name: 🛠️ Build Compiled Binary Assets
+    - name: Build Compiled Binary Assets
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -45,7 +44,7 @@ jobs:
         fi
         go build -v -o $BINARY_NAME main.go
 
-    - name: 📤 Upload Binaries to Release
+    - name: Upload Binaries to Release
       uses: softprops/action-gh-release@v2
       with:
         files: hobbydns-${{ matrix.goos }}-${{ matrix.goarch }}*

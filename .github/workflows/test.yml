@@ -12,15 +12,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📥 Check out repository
+    - name: Check out repository
       uses: actions/checkout@v4
 
-    - name: 🐹 Set up Go environment
+    - name: Set up Go environment
       uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
 
-    - name: 🧪 Run tests
+    - name: Run tests
       run: go test -v ./...
 
   build:
@@ -33,15 +33,15 @@ jobs:
         goarch: [amd64, arm64]
 
     steps:
-    - name: 📥 Check out repository
+    - name: Check out repository
       uses: actions/checkout@v4
 
-    - name: 🐹 Set up Go environment
+    - name: Set up Go environment
       uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
 
-    - name: 🛠️ Build Compiled Binary Assets
+    - name: Build Compiled Binary Assets
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -52,7 +52,7 @@ jobs:
         fi
         go build -o $BINARY_NAME
 
-    - name: 📤 Upload Build Artifacts
+    - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: hobbydns-${{ matrix.goos }}-${{ matrix.goarch }}
