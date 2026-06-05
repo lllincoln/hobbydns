@@ -1,0 +1,11 @@
+.git
+.github
+.agents
+.codex
+
+hobbydns-*
+Dockerfile
+README.md
+LICENSE
+
+config.json

@@ -11,9 +11,9 @@ Unlike traditional heavyweight DNS software (like BIND9 or Unbound) which requir
 * **🔄 In-Memory Dynamic Hot-Swapping:** Type `reload` in the runtime CLI to reload configuration data safely using thread-safe state synchronization (`sync.RWMutex`).
 * **🪶 Lean Architecture:** Built using Go, making it trivial to compile into a single, cross-platform executable binary file.
 
-## 🚀 Quick Start
+## 📦 Installation
 
-### 📦 1. Download Prebuilt Binaries
+### Option 1: Use Prebuilt Binaries
 
 Download the executable for your system architecture:
 
@@ -24,7 +24,55 @@ Download the executable for your system architecture:
 * **Windows amd64:** [hobbydns-windows-amd64.exe](https://github.com/lllincoln/hobbydns/releases/latest/download/hobbydns-windows-amd64.exe)
 * **Windows arm64:** [hobbydns-windows-arm64.exe](https://github.com/lllincoln/hobbydns/releases/latest/download/hobbydns-windows-arm64.exe)
 
-### 📄 2. Create Configuration File
+Ensure you have a `config.json` placed in your working directory (see structural example below). Because binding to standard system network ports (`:53`) requires admin network capabilities, execute with escalated privileges:
+
+```sh
+sudo ./hobbydns
+```
+
+Or, if you're not using a system port, just run it in user mode:
+
+```sh
+./hobbydns
+```
+
+### Option 2: Use the Docker Image
+
+Release images are published to GitHub Container Registry as `ghcr.io/lllincoln/hobbydns`.
+
+Pull the latest release image:
+
+```sh
+docker pull ghcr.io/lllincoln/hobbydns:latest
+```
+
+Run the container with your local `config.json` mounted into `/data`, which is the container working directory:
+
+```sh
+docker run --rm -it \
+  --name hobbydns \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -v "./config.json:/data/config.json:ro" \
+  ghcr.io/lllincoln/hobbydns:latest
+```
+
+To use a specific release, replace `latest` with the release tag:
+
+```sh
+docker run --rm -it \
+  --name hobbydns \
+  -p 53:53/tcp \
+  -p 53:53/udp \
+  -v "./config.json:/data/config.json:ro" \
+  ghcr.io/lllincoln/hobbydns:v1.0.0
+```
+
+If port 53 requires elevated permissions on your host, run Docker with the appropriate privileges for your environment.
+
+## 🚀 Quick Start
+
+### 📄 Create Configuration File
 
 Create your control rules inside a file named `config.json`. Below is a comprehensive blueprint detailing global options, fallback variables, and multi-zone arrays:
 
@@ -68,21 +116,7 @@ Create your control rules inside a file named `config.json`. Below is a comprehe
 }
 ```
 
-### 🚀 3. Launch the Server
-
-Ensure you have a `config.json` placed in your working directory (see structural example below). Because binding to standard system network ports (`:53`) requires admin network capabilities, execute with escalated privileges:
-
-```sh
-sudo ./hobbydns
-```
-
-Or, if you're not using a system port, just run it in user mode:
-
-```sh
-./hobbydns
-```
-
-### 🔄 4. Hot-Reloading Configs
+### 🔄 Hot-Reloading Configs
 
 When changes are applied to your `config.json` file, open the interactive application shell, type `reload`, and hit Enter! No restarts needed:
 
@@ -94,7 +128,9 @@ reload
 🚀 Configuration and Proxy parameters hot-swapped successfully!
 ```
 
-### 🔍 5. Testing Resolutions
+When running in Docker, the command above uses a read-only bind mount for `config.json`. Update the host file, then type `reload` in the attached container terminal.
+
+### 🔍 Testing Resolutions
 
 Open a separate terminal shell and execute network diagnostic lookups via `dig` to confirm your custom domain mappings work beautifully:
 
